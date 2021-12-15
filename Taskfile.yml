@@ -1,0 +1,40 @@
+version: '3'
+
+includes:
+  go: ./tasks/go.yml
+  deps: ./tasks/deps.yml
+
+tasks:
+
+  deps-install:
+    desc: Install Debian/Ubuntu dependencies
+    cmds:
+      - "sudo apt update"
+      - "sudo apt install -y golang debootstrap systemd-container libglib2.0-dev libostree-dev"
+    preconditions:
+      - sh: '[[ -f /etc/os-release ]] && sed -n "s/^ID.*=\(.*\)$/\1/p" /etc/os-release|grep -q debian'
+        msg: "OS is not debian based"
+
+  ubuntu:
+    desc: Build Ubuntu with debos
+    deps:
+      - go:debos
+      - task: deps:check-cmd
+        vars: {CMD: "debootstrap"}
+      - task: deps:check-cmd
+        vars: {CMD: "systemd-nspawn"}
+    cmds:
+      - "mkdir -p out"
+      - "{{.SUDO}} cache/go/bin/debos --artifactdir=out --template-var=suite:focal debos/ubuntu.yaml"
+      - 'if [ ! -z "{{.SUDO}}" ];then {{.SUDO}} chown $(id -u):$(id -g) {{.KERNEL}} {{.INITRD}};fi'
+    status:
+      - "test -f {{.KERNEL}}"
+      - "test -f {{.INITRD}}"
+    preconditions:
+      - sh: "[ $(id -u) -eq 0 ] || [ -w /dev/kvm ] || command -v sudo 2>/dev/null"
+        msg: "[ERROR] root privileges required when kvm virtualization is not available"
+    vars:
+      SUDO:
+        sh: "[ $(id -u) -eq 0 ] || [ -w /dev/kvm ] || echo sudo"
+      KERNEL: out/ubuntu-focal-amd64.vmlinuz
+      INITRD: out/ubuntu-focal-amd64.cpio.gz

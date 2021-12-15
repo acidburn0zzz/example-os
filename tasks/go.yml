@@ -1,0 +1,89 @@
+version: '3'
+
+tasks:
+
+  get:
+    cmds:
+      - "go get -d -u {{.REPO}}/..."
+    label: "get {{.NAME}}"
+    status:
+      - "test -f cache/go/src/{{.REPO}}/.git/config"
+    run: when_changed
+    vars:
+        NAME: "{{.NAME}}"
+        REPO: "{{.REPO}}"
+
+  fetch:
+    cmds:
+      - "git -C cache/go/src/{{.REPO}} checkout --quiet"
+      - "git -C cache/go/src/{{.REPO}} fetch --all --quiet"
+    label: "fetch {{.NAME}}"
+    run: when_changed
+    vars:
+        NAME: "{{.NAME}}"
+        REPO: "{{.REPO}}"
+
+  checkout:
+    cmds:
+      - "git -C cache/go/src/{{.REPO}} checkout --quiet {{.BRANCH}}"
+    label: "checkout {{.NAME}}"
+    run: when_changed
+    vars:
+       NAME: "{{.NAME}}"
+       REPO: "{{.REPO}}"
+       BRANCH: "{{.BRANCH}}"
+
+  install:
+    cmds:
+      - "go install {{.REPO}}/{{.DIR}}"
+    label: "install {{.NAME}}"
+    run: when_changed
+    vars:
+      <<: &go-vars
+        # binary name
+        NAME: "{{.NAME}}"
+        # package repository
+        REPO: "{{.REPO}}"
+        # package branch (optional)
+        BRANCH: "{{.BRANCH}}"
+        # package directory (optional)
+        DIR: "{{.DIR}}"
+
+  target:
+    cmds:
+      - task: get
+        vars: *go-vars
+      - task: fetch
+        vars: *go-vars
+      - task: checkout
+        vars: *go-vars
+      - task: install
+        vars: *go-vars
+    label: "{{.NAME}}"
+    status:
+      - "test -x cache/go/bin/{{.NAME}}"
+      - "git -C cache/go/src/{{.REPO}} diff --quiet {{.BRANCH}}"
+    run: when_changed
+    vars: *go-vars
+
+  debos:
+    cmds:
+      - task: target
+        vars: *go-vars
+    deps:
+      # libglib2.0-dev
+      - task: :deps:check-pkg
+        vars: {PKG: "glib-2.0"}
+      - task: :deps:check-pkg
+        vars: {PKG: "gobject-2.0"}
+      # libostree-dev
+      - task: :deps:check-pkg
+        vars: {PKG: "ostree-1"}
+    vars:
+      NAME: "debos"
+      REPO: "github.com/go-debos/debos"
+      DIR: "cmd/debos"
+
+  clean:
+    cmds:
+      - rm -rf cache/go
